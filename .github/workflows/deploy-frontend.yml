@@ -1,0 +1,65 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: vd-dashboard
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: vd-dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Create frontend archive
+        run: |
+          tar -czf frontend.tar.gz -C dist .
+
+      - name: Prepare SSH key
+        working-directory: .
+        run: |
+          mkdir -p ~/.ssh
+
+          echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/github_actions_key
+
+          chmod 600 ~/.ssh/github_actions_key
+
+          ssh-keyscan -H "${{ secrets.VM_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload frontend build
+        working-directory: .
+        run: |
+          scp -i ~/.ssh/github_actions_key \
+            vd-dashboard/frontend.tar.gz \
+            "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/tmp/frontend.tar.gz"
+
+      - name: Deploy frontend
+        working-directory: .
+        run: |
+          ssh -i ~/.ssh/github_actions_key \
+            "${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}" \
+            "sudo -n /usr/local/sbin/deploy-veterinary-frontend"
+
+      - name: Deployment successful
+        working-directory: .
+        run: |
+          echo "Frontend deployment completed successfully"

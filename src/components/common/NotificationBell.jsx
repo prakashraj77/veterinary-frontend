@@ -1,0 +1,10 @@
+import { useEffect, useRef, useState } from "react";
+import { FiBell, FiEdit3, FiPackage, FiFileText } from "react-icons/fi";
+import { getUnreadNotifications, markNotificationRead } from "../../services/notificationService";
+const ICONS = { followup: { Icon: FiEdit3, tone: "tone-primary" }, stock: { Icon: FiPackage, tone: "tone-warning" }, invoice: { Icon: FiFileText, tone: "tone-danger" } };
+export default function NotificationBell() {
+  const [open, setOpen] = useState(false); const [notifications, setNotifications] = useState([]); const ref = useRef(null);
+  const load = async () => { try { const data = await getUnreadNotifications(); setNotifications(Array.isArray(data) ? data : []); } catch { setNotifications([]); } };
+  useEffect(() => { load(); const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }; document.addEventListener("mousedown", onClick); return () => document.removeEventListener("mousedown", onClick); }, []);
+  return <div className="notif-wrap" ref={ref}><button className="icon-tile tone-primary" onClick={() => { setOpen((o) => !o); if (!open) load(); }}><FiBell size={18} />{notifications.length > 0 && <span className="notif-dot" />}</button>{open && <div className="notif-dropdown fade-in"><div className="flex-between" style={{ marginBottom: 14 }}><h4 className="panel-title">Notifications</h4><span className="notif-count">{notifications.length} unread</span></div><div className="row-list">{notifications.map((n) => { const cfg = ICONS[n.type] || ICONS.followup; const Icon = cfg.Icon; return <button key={n.id} className="row-item" style={{ width: "100%", textAlign: "left", border: 0, background: "transparent" }} onClick={async () => { await markNotificationRead(n.id).catch(() => {}); load(); }}><div className={`icon-tile sm ${cfg.tone}`}><Icon size={15} /></div><div className="row-body"><p className="row-title">{n.title || n.type || "Notification"}</p><p className="row-desc">{n.message || n.detail || ""}</p></div></button>; })}{!notifications.length && <p className="table-empty">No unread notifications.</p>}</div></div>}</div>;
+}
