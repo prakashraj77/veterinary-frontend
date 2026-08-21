@@ -27,23 +27,56 @@ export default function Prescription() {
     if(!node)return;
     try{
       setGeneratingPdf(true);
-      const canvas=await html2canvas(node,{scale:3,useCORS:true,backgroundColor:"#ffffff"});
-      const imgData=canvas.toDataURL("image/png");
-      const pdf=new jsPDF({unit:"pt",format:"a4"});
+
+      // Render the live preview at high resolution (min 3x, or the device's own
+      // pixel ratio if it's sharper) so the exported PDF looks crisp when printed,
+      // not just on-screen.
+      const renderScale=Math.max(3,window.devicePixelRatio||1);
+      const canvas=await html2canvas(node,{
+        scale:renderScale,
+        useCORS:true,
+        backgroundColor:"#ffffff",
+        logging:false,
+        windowWidth:node.scrollWidth,
+        windowHeight:node.scrollHeight,
+      });
+
+      const pdf=new jsPDF({unit:"pt",format:"a4",compress:true});
       const pageWidth=pdf.internal.pageSize.getWidth();
       const pageHeight=pdf.internal.pageSize.getHeight();
-      const imgWidth=pageWidth;
-      const imgHeight=(canvas.height*imgWidth)/canvas.width;
-      let heightLeft=imgHeight;
-      let position=0;
-      pdf.addImage(imgData,"PNG",0,position,imgWidth,imgHeight);
-      heightLeft-=pageHeight;
-      while(heightLeft>0){
-        position=heightLeft-imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData,"PNG",0,position,imgWidth,imgHeight);
-        heightLeft-=pageHeight;
+
+      // Real A4 print margin so the prescription doesn't run edge-to-edge.
+      const margin=28;
+      const contentWidth=pageWidth-margin*2;
+      const contentHeight=pageHeight-margin*2;
+
+      // Convert the target content height (in PDF points) into source canvas
+      // pixels, then slice the canvas into whole pages so we never cut a
+      // medicine row or line of text in half between pages.
+      const pxPerPt=canvas.width/contentWidth;
+      const pageSlicePx=Math.floor(contentHeight*pxPerPt);
+      const totalPages=Math.max(1,Math.ceil(canvas.height/pageSlicePx));
+
+      const pageCanvas=document.createElement("canvas");
+      pageCanvas.width=canvas.width;
+      const ctx=pageCanvas.getContext("2d");
+
+      for(let page=0;page<totalPages;page++){
+        const sliceStart=page*pageSlicePx;
+        const sliceHeight=Math.min(pageSlicePx,canvas.height-sliceStart);
+        pageCanvas.height=sliceHeight;
+        ctx.clearRect(0,0,pageCanvas.width,pageCanvas.height);
+        ctx.fillStyle="#ffffff";
+        ctx.fillRect(0,0,pageCanvas.width,pageCanvas.height);
+        ctx.drawImage(canvas,0,sliceStart,canvas.width,sliceHeight,0,0,canvas.width,sliceHeight);
+
+        const imgData=pageCanvas.toDataURL("image/png",1.0);
+        const drawHeight=(sliceHeight*contentWidth)/canvas.width;
+
+        if(page>0)pdf.addPage();
+        pdf.addImage(imgData,"PNG",margin,margin,contentWidth,drawHeight,undefined,"FAST");
       }
+
       const fileName=`prescription-${patient?.name?patient.name.replace(/\s+/g,"-").toLowerCase():"zenve"}-${visitDate}.pdf`;
       pdf.save(fileName);
       toast.success("PDF downloaded");
@@ -136,7 +169,9 @@ export default function Prescription() {
 
         <div className="rx-preview-letterhead">
           <div className="rx-preview-brand">
-            <div className="rx-preview-mark rx-preview-mark-z">Z</div>
+            <div className="rx-preview-mark">
+              <img src="/zenve.png" alt="Zenve logo" className="rx-preview-logo" />
+            </div>
             <div>
               <p className="rx-preview-clinic">Zenve Veterinary Clinic</p>
               <p className="rx-preview-faint">Veterinary Doctor · General &amp; Emergency Care</p>
