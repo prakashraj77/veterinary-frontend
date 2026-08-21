@@ -1,5 +1,5 @@
 export const APP = {
-  NAME: "VD Dashboard",
+  NAME: "Zenve Doctors",
 
   VERSION: "1.0.0",
 
